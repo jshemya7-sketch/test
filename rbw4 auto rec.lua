@@ -1,185 +1,307 @@
-game.Players.LocalPlayer.Character.HumanoidRootPart.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.300000012, 0.5, 1, 1)    
+local WAIT = task.wait
+local TBINSERT = table.insert
+local TBFIND = table.find
+local TBREMOVE = table.remove
+local V2 = Vector2.new
+local ROUND = math.round
 
-local bb=game:service'VirtualUser'
-game:service'Players'.LocalPlayer.Idled:connect(function()
-	bb:CaptureController()bb:ClickButton2(Vector2.new())
-end)
+local RS = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local To2D = Camera.WorldToViewportPoint
+local LocalPlayer = game.Players.LocalPlayer
 
-local players = game.Players
-local replicated = game.ReplicatedStorage
-local runservice = game:GetService("RunService")
+-- Only thing for now is Skeleton
+local Library = {};
+Library.__index = Library;
 
-local event = replicated.GameEvents.ClientAction
-
-local player = players.LocalPlayer
-local char = player.Character
-
-local Distance = 7
-
-
-local goals
-
-repeat wait() until char.MyHoop.Value ~= nil
-
-do
-	local myhoop = char.MyHoop.Value
-	local hoopName = string.sub(tostring(myhoop),1,5)
-	local hoopNumber = string.sub(tostring(myhoop),6,6)
-
-	if hoopNumber == "2" then
-		hoopNumber = "1"
-	elseif hoopNumber == "1" then
-		hoopNumber = "2"
-	end
-
-	for i, v in pairs(workspace:GetChildren()) do
-		if v.Name == (hoopName .. hoopNumber) then
-			for key, value in pairs(v:GetChildren()) do
-				if value.Name == "Goal" then
-					goals = value
-				end
-			end
-		end
-	end
-
+-- Functions
+function Library:NewLine(info)
+	local l = Drawing.new("Line")
+	l.Visible = info.Visible or true;
+	l.Color = info.Color or Color3.fromRGB(0,255,0);
+	l.Transparency = info.Transparency or 1;
+	l.Thickness = info.Thickness or 1;
+	return l
 end
 
-player.CharacterAdded:Connect(function(CHAR)
-	char = CHAR
-end)
-
-local function XZ(V)
-	return Vector3.new(V.X, 0, V.Z)
+function Library:Smoothen(v)
+	return V2(ROUND(v.X), ROUND(v.Y))
 end
 
-local function MoveTo(POS)
-	local humanoid = char.Humanoid
-
-
-	humanoid:MoveTo(POS)
-end
-
-local args = {
-	[1] = "Jump"
+-- Skeleton Object
+local Skeleton = {
+	Removed = false;
+	Player = nil;
+	Visible = false;
+	Lines = {};
+	Color = Color3.fromRGB(0,255,0);
+	Alpha = 1;
+	Thickness = 1;
+	DoSubsteps = true;
 }
-local args1 = {
-	[1] = "Sprint",
-	[2] = true
-}
+Skeleton.__index = Skeleton;
 
-function getnearestnonteammate()
-	local target = nil
-	local distance = math.huge
+function Skeleton:UpdateStructure()
+	if not self.Player.Character then return end
 
-	for i,v in next, game.Players:GetPlayers() do
-		if v and v.Character and v~=game.Players.LocalPlayer and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChildOfClass("Humanoid") and  v.Character:FindFirstChildOfClass("Humanoid").Health>0 and not v.Character:FindFirstChild("Highlight") then
-			local plrdist = game.Players.LocalPlayer:DistanceFromCharacter(v.Character:FindFirstChildOfClass('Humanoid').RootPart.CFrame.p)
-			if plrdist < distance then
-				target = v
-				distance = plrdist
-			end
-		end
-	end
+	self:RemoveLines();
 
-	return target
-end
-
-local function Defend()
-	local OppositePlayer = getnearestnonteammate().Character
-	local MyDistance = (char.HumanoidRootPart.Position - OppositePlayer.HumanoidRootPart.Position).Magnitude
-	if math.round(MyDistance) <= math.huge then
-
-		local goal = goals
-		local _root = OppositePlayer.HumanoidRootPart
-
-		local path = (XZ(goal.Position) - XZ(_root.Position)).unit
-		local pos = _root.Position + (path * Distance)
-
-		local HoopDistance = (OppositePlayer.HumanoidRootPart.Position - goal.Position).Magnitude
-
-
-		if math.round(MyDistance) <= 5 then
-			if (OppositePlayer:FindFirstChild("ShotMeterTiming")) then 
-				args = {
-					[1] = "Jump"
-				}
-				args1 = {
-					[1] = "Sprint",
-					[2] = true
-				}
-
-
-				if (OppositePlayer:FindFirstChild("ShotMeterTiming").Value >= 0) then
-					event:FireServer(unpack(args1))
-					event:FireServer(unpack(args))
-					args1 = {
-						[1] = "Sprint",
-						[2] = false
-					}
-					event:FireServer(unpack(args1))
-					args1 = {
-						[1] = "Sprint",
-						[2] = true
-					}
-				end
-			end
+	for _, part in next, self.Player.Character:GetChildren() do		
+		if not part:IsA("BasePart") then
+			continue;
 		end
 
-		if OppositePlayer:FindFirstChild("ShotMeterTiming") then
-			if HoopDistance > 20 and math.round(MyDistance) >= 0 then
-				args1 = {
-					[1] = "Sprint",
-					[2] = true
-				}
-				event:FireServer(unpack(args1))
-				pos = _root.Position + (path)
-			elseif HoopDistance < 20 and math.round(MyDistance) >= 0 then
-				args1 = {
-					[1] = "Sprint",
-					[2] = true
-				}
-				event:FireServer(unpack(args1))
-				pos = _root.Position + (path * 2)
+		for _, link in next, part:GetChildren() do			
+			if not link:IsA("Motor6D") then
+				continue;
 			end
-		else
-			args1 = {
-				[1] = "Sprint",
-				[2] = false
-			}
-			event:FireServer(unpack(args1))
-			pos = _root.Position + (path * Distance)
+			
+			TBINSERT(
+				self.Lines,
+				{
+					Library:NewLine({
+						Visible = self.Visible;
+						Color = self.Color;
+						Transparency = self.Alpha;
+						Thickness = self.Thickness;
+					}),
+					Library:NewLine({
+						Visible = self.Visible;
+						Color = self.Color;
+						Transparency = self.Alpha;
+						Thickness = self.Thickness;
+					}),
+					part.Name,
+					link.Name
+				}
+			);
 		end
-
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
-		MoveTo(pos)
 	end
 end
 
-local runloop
-
-runLoop = game:GetService("RunService").RenderStepped:Connect(function()
-	if 10240522770 == game.PlaceId then
-		Defend()
-		event:FireServer("Guard", true)
-	else
-		runLoop:Disconnect()
+function Skeleton:SetVisible(State)
+	for _,l in pairs(self.Lines) do
+		l[1].Visible = State;
+		l[2].Visible = State;
 	end
-end)
+end
+
+function Skeleton:SetColor(Color)
+	self.Color = Color;
+	for _,l in pairs(self.Lines) do
+		l[1].Color = Color;
+		l[2].Color = Color;
+	end
+end
+
+function Skeleton:SetAlpha(Alpha)
+	self.Alpha = Alpha;
+	for _,l in pairs(self.Lines) do
+		l[1].Transparency = Alpha;
+		l[2].Transparency = Alpha;
+	end
+end
+
+function Skeleton:SetThickness(Thickness)
+	self.Thickness = Thickness;
+	for _,l in pairs(self.Lines) do
+		l[1].Thickness = Thickness;
+		l[2].Thickness = Thickness;
+	end
+end
+
+function Skeleton:SetDoSubsteps(State)
+	self.DoSubsteps = State;
+end
+
+-- Main Update Loop
+function Skeleton:Update()
+	if self.Removed then
+		return;
+	end
+
+	local Character = self.Player.Character;
+	if not Character then
+		self:SetVisible(false);
+		if not self.Player.Parent then
+			self:Remove();
+		end
+		return;
+	end
+
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid");
+	if not Humanoid then
+		self:SetVisible(false);
+		return;
+	end
+
+	self:SetColor(self.Color);
+	self:SetAlpha(self.Alpha);
+	self:SetThickness(self.Thickness);
+
+	local update = false;
+	for _, l in pairs(self.Lines) do
+		local part = Character:FindFirstChild(l[3])
+		if not part then
+			l[1].Visible = false;
+			l[2].Visible = false;
+			update = true;
+			continue;
+		end
+
+		local link = part:FindFirstChild(l[4])
+		if not (link and link.part0 and link.part1) then
+			l[1].Visible = false;
+			l[2].Visible = false;
+			update = true;
+			continue;
+		end
+
+		local part0 = link.Part0;
+		local part1 = link.Part1;
+		
+		if self.DoSubsteps and link.C0 and link.C1 then
+			local c0 = link.C0;
+			local c1 = link.C1;
+
+			-- Center of part0 to c0
+			local part0p, v1 = To2D(Camera, part0.CFrame.p);
+			local part0cp, v2 = To2D(Camera, (part0.CFrame * c0).p);
+			
+			if v1 and v2 then
+				l[1].From = V2(part0p.x, part0p.y);
+				l[1].To = V2(part0cp.x, part0cp.y);
+
+				l[1].Visible = true;
+			else 
+				l[1].Visible = false;
+			end
+			
+			-- Center of part1 to c1
+			local part1p, v3 = To2D(Camera, part1.CFrame.p);
+			local part1cp, v4 = To2D(Camera, (part1.CFrame * c1).p);
+		
+			if v3 and v4 then
+				l[2].From = V2(part1p.x, part1p.y);
+				l[2].To = V2(part1cp.x, part1cp.y);
+
+				l[2].Visible = true;
+			else 
+				l[2].Visible = false;
+			end
+		else					
+			local part0p, v1 = To2D(Camera, part0.CFrame.p);
+			local part1p, v2 = To2D(Camera, part1.CFrame.p);
+			
+			if v1 and v2 then
+				l[1].From = V2(part0p.x, part0p.y);
+				l[1].To = V2(part1p.x, part1p.y);
+
+				l[1].Visible = true;
+			else 
+				l[1].Visible = false;
+			end
+			
+			l[2].Visible = false;
+		end
+	end
+	
+	if update or #self.Lines == 0 then
+		self:UpdateStructure();
+	end
+end
+
+function Skeleton:Toggle()
+	self.Visible = not self.Visible;
+
+	if self.Visible then 
+		self:RemoveLines();
+		self:UpdateStructure();
+		
+		local c;c = RS.Heartbeat:Connect(function()
+			if not self.Visible then
+				self:SetVisible(false);
+				c:Disconnect();
+				return;
+			end
+
+			self:Update();
+		end)
+	end
+end
+
+function Skeleton:RemoveLines()
+	for _,l in pairs(self.Lines) do
+		l[1]:Remove();
+		l[2]:Remove();
+	end
+	self.Lines = {};
+end
+
+function Skeleton:Remove()
+	self.Removed = true;
+	self:RemoveLines();
+end
+
+-- Create Skeleton Function
+function Library:NewSkeleton(Player, Visible, Color, Alpha, Thickness, DoSubsteps)
+	if not Player then
+		error("Missing Player argument (#1)")
+	end
+	
+	local s = setmetatable({}, Skeleton);
+
+	s.Player = Player;
+	s.Bind = Player.UserId;
+	
+	if DoSubsteps ~= nil then
+		s.DoSubsteps = DoSubsteps;
+	end
+	
+	if Color then
+		s:SetColor(Color)
+	end
+	
+	if Alpha then
+		s:SetAlpha(Alpha)
+	end
+	
+	if Thickness then
+		s:SetThickness(Thickness)
+	end
+
+	if Visible then
+		s:Toggle();
+	end
+
+	return s;
+end
+
+-- LIBRARY FORMAT
+if true then
+	return Library;
+end
+
+-- TEST
+if false then
+	-- local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Blissful4992/ESPs/main/UniversalSkeleton.lua"))()
+
+	local Skeletons = {}
+	for _, Player in next, game.Players:GetChildren() do
+		if Player ~= LocalPlayer then
+			table.insert(Skeletons, Library:NewSkeleton(Player, true));
+		end
+	end
+	game.Players.PlayerAdded:Connect(function(Player)
+		table.insert(Skeletons, Library:NewSkeleton(Player, true));
+	end)
+
+	while true do
+		for _, skeleton in next, Skeletons do
+			skeleton:SetColor(Color3.fromRGB(skeleton.Player.TeamColor == LocalPlayer.TeamColor and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)));
+			skeleton:SetThickness(4);
+		end
+
+		task.wait(1)
+	end
+end
